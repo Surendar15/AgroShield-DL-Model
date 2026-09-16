@@ -5,8 +5,23 @@ import tensorflow as tf
 from PIL import Image
 from typing import List
 from fastapi import FastAPI, UploadFile, File, HTTPException
+from fastapi.responses import HTMLResponse, FileResponse
+from fastapi.middleware.cors import CORSMiddleware
 
-app = FastAPI(title="AgroShield ML Damage Detection API")
+app = FastAPI(
+    title="AgroShield ML Damage Detection API",
+    description="Deep learning powered crop leaf damage classification API & Dashboard",
+    version="1.0.0"
+)
+
+# Enable CORS for external web clients
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # ================= CONFIG =================
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -14,15 +29,22 @@ MODEL_PATH = os.path.join(BASE_DIR, "agrimodel.h5")
 IMG_SIZE = 224
 PREDICTION_THRESHOLD = 0.5
 
-print("📂 Model path:", MODEL_PATH)
-print("📂 Exists?:", os.path.exists(MODEL_PATH))
+import sys
+if hasattr(sys.stdout, "reconfigure"):
+    try:
+        sys.stdout.reconfigure(encoding="utf-8")
+    except Exception:
+        pass
+
+print("[INFO] Model path:", MODEL_PATH)
+print("[INFO] Exists?:", os.path.exists(MODEL_PATH))
 
 # ================= LOAD MODEL =================
 try:
     model = tf.keras.models.load_model(MODEL_PATH, compile=False)
-    print("✅ Model loaded successfully")
+    print("[SUCCESS] Model loaded successfully")
 except Exception as e:
-    print("❌ Model loading failed:", e)
+    print("[ERROR] Model loading failed:", e)
     model = None
 
 
@@ -125,3 +147,36 @@ async def predict(files: List[UploadFile] = File(...)):
         "results": results,
         "finalConfidence": round(avg_confidence * 100, 2)
     }
+
+
+# ================= DASHBOARD & SAMPLES =================
+@app.get("/", response_class=HTMLResponse, summary="Interactive Web Dashboard")
+async def dashboard():
+    html_file = os.path.join(BASE_DIR, "index.html")
+    if os.path.exists(html_file):
+        with open(html_file, "r", encoding="utf-8") as f:
+            return HTMLResponse(content=f.read())
+    return HTMLResponse(content="<h1>AgroShield API is running. Visit <a href='/docs'>/docs</a> for Swagger UI.</h1>")
+
+
+@app.get("/samples/{kind}/{name}", summary="Serve sample test images")
+async def get_sample(kind: str, name: str):
+    folder_map = {
+        "damaged": os.path.join(BASE_DIR, "image data", "damaged image"),
+        "undamaged": os.path.join(BASE_DIR, "image data", "undamaged image")
+    }
+    target_dir = folder_map.get(kind.lower())
+    if not target_dir:
+        raise HTTPException(status_code=404, detail="Category not found")
+    
+    file_path = os.path.join(target_dir, name)
+    if not os.path.exists(file_path):
+        raise HTTPException(status_code=404, detail="Sample image not found")
+
+    media_type = "image/jpeg" if name.lower().endswith((".jpg", ".jpeg")) else "image/png"
+    return FileResponse(file_path, media_type=media_type)
+
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run("main:app", host="127.0.0.1", port=8000, reload=False)
