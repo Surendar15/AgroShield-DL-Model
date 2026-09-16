@@ -5,12 +5,12 @@ import tensorflow as tf
 from PIL import Image
 from typing import List
 from fastapi import FastAPI, UploadFile, File, HTTPException
-from fastapi.responses import HTMLResponse, FileResponse
+from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI(
     title="AgroShield ML Damage Detection API",
-    description="Deep learning powered crop leaf damage classification API & Dashboard",
+    description="Deep learning powered crop leaf damage classification REST API",
     version="1.0.0"
 )
 
@@ -149,14 +149,37 @@ async def predict(files: List[UploadFile] = File(...)):
     }
 
 
-# ================= DASHBOARD & SAMPLES =================
-@app.get("/", response_class=HTMLResponse, summary="Interactive Web Dashboard")
-async def dashboard():
-    html_file = os.path.join(BASE_DIR, "index.html")
-    if os.path.exists(html_file):
-        with open(html_file, "r", encoding="utf-8") as f:
-            return HTMLResponse(content=f.read())
-    return HTMLResponse(content="<h1>AgroShield API is running. Visit <a href='/docs'>/docs</a> for Swagger UI.</h1>")
+# ================= ROOT & HEALTH CHECK =================
+@app.get("/", summary="Backend API Status")
+async def root():
+    return {
+        "status": "online",
+        "service": "AgroShield ML Damage Detection API",
+        "version": "1.0.0",
+        "model_loaded": model is not None,
+        "docs_url": "/docs",
+        "redoc_url": "/redoc",
+        "endpoints": {
+            "predict": {
+                "method": "POST",
+                "path": "/predict",
+                "description": "Upload leaf image(s) for damage classification"
+            },
+            "health": {
+                "method": "GET",
+                "path": "/health",
+                "description": "API & model health status"
+            }
+        }
+    }
+
+
+@app.get("/health", summary="Health Check")
+async def health():
+    return {
+        "status": "healthy" if model is not None else "degraded",
+        "model_loaded": model is not None
+    }
 
 
 @app.get("/samples/{kind}/{name}", summary="Serve sample test images")
