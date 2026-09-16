@@ -5,7 +5,7 @@ import tensorflow as tf
 from PIL import Image
 from typing import List
 from fastapi import FastAPI, UploadFile, File, HTTPException
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI(
@@ -159,11 +159,17 @@ async def root():
         "model_loaded": model is not None,
         "docs_url": "/docs",
         "redoc_url": "/redoc",
+        "test_page": "/test",
         "endpoints": {
             "predict": {
                 "method": "POST",
                 "path": "/predict",
                 "description": "Upload leaf image(s) for damage classification"
+            },
+            "test_page": {
+                "method": "GET",
+                "path": "/test",
+                "description": "Interactive leaf testing & judge verification portal"
             },
             "health": {
                 "method": "GET",
@@ -180,6 +186,18 @@ async def health():
         "status": "healthy" if model is not None else "degraded",
         "model_loaded": model is not None
     }
+
+
+# ================= TESTER & VERIFICATION PAGE =================
+@app.get("/test", response_class=HTMLResponse, summary="Interactive Image Testing & Judge Verification Portal")
+@app.get("/verify", response_class=HTMLResponse, include_in_schema=False)
+@app.get("/demo", response_class=HTMLResponse, include_in_schema=False)
+async def test_page():
+    html_file = os.path.join(BASE_DIR, "index.html")
+    if os.path.exists(html_file):
+        with open(html_file, "r", encoding="utf-8") as f:
+            return HTMLResponse(content=f.read())
+    return HTMLResponse(content="<h1>Testing portal not found</h1>", status_code=404)
 
 
 @app.get("/samples/{kind}/{name}", summary="Serve sample test images")
